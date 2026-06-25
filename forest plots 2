@@ -1,0 +1,136 @@
+library(readxl)
+library(meta)
+library(mada)
+library(grid) 
+
+# ==========================================
+# 1. PREPARE DATA & SUBGROUPS
+# ==========================================
+df <- read_excel("/Users/harshsingh/Desktop/systematic review full text papers /2X2 table forest plot .xlsx")
+df$Fracture   <- df$TP + df$FN
+df$NoFracture <- df$FP + df$TN
+df$Subgroup   <- c(rep("Adult", 16), rep("Pediatric", nrow(df) - 16))
+
+# ==========================================
+# 2. BIVARIATE POOLED ESTIMATE (OVERALL)
+# ==========================================
+fit_biv_total <- reitsma(data = df)
+sum_biv_total <- summary(fit_biv_total)
+
+mu_total  <- sum_biv_total$coefficients[1, 1]
+se_total  <- sum_biv_total$coefficients[1, 2]
+mu2_total <- sum_biv_total$coefficients[2, 1]
+se2_total <- sum_biv_total$coefficients[2, 2]
+
+fmt_p <- function(p) if (p < 0.0001) "p < 0.0001" else paste0("p = ", round(p, 4))
+
+# ==========================================
+# 3. SENSITIVITY SUBGROUP PLOT
+# ==========================================
+m_sens_sub <- metaprop(
+  event = TP, n = Fracture, studlab = Study, data = df,
+  subgroup = Subgroup,
+  method = "Inverse", sm = "PLOGIT",
+  random = TRUE, common = FALSE,
+  pscale = 100
+)
+
+m_sens_sub$TE.random    <- mu_total
+m_sens_sub$lower.random <- mu_total - 1.96 * se_total
+m_sens_sub$upper.random <- mu_total + 1.96 * se_total
+m_sens_sub$text.random  <- "Bivariate Pooled Estimate"
+
+sens_I2_adult    <- round(m_sens_sub$I2.w[1] * 100, 1)
+sens_tau2_adult  <- round(m_sens_sub$tau2.w[1], 4)
+sens_pQ_adult    <- fmt_p(m_sens_sub$pval.Q.w[1])
+sens_I2_ped      <- round(m_sens_sub$I2.w[2] * 100, 1)
+sens_tau2_ped    <- round(m_sens_sub$tau2.w[2], 4)
+sens_pQ_ped      <- fmt_p(m_sens_sub$pval.Q.w[2])
+sens_I2_overall  <- round(m_sens_sub$I2 * 100, 1)
+sens_tau2_overall<- round(m_sens_sub$tau2, 4)
+sens_pQ_overall  <- fmt_p(m_sens_sub$pval.Q)
+sens_Qb          <- round(m_sens_sub$Q.b.random, 2)
+sens_dfb         <- m_sens_sub$df.Q.b
+sens_pQb         <- fmt_p(m_sens_sub$pval.Q.b.random)
+
+png("/Users/harshsingh/forest_plot_sensitivity_subgroup_fixed.png", width = 1800, height = 3000, res = 200)
+
+meta::forest(
+  m_sens_sub,
+  main          = "Sensitivity (%) by Age Group",
+  col.square    = "navy", col.diamond = "maroon",
+  weight.study  = "random",
+  print.I2      = FALSE, print.tau2 = FALSE, 
+  print.Q       = FALSE, print.pval.Q = FALSE, 
+  print.Q.b     = FALSE, test.subgroup = FALSE,
+  spacing       = 1.4, digits = 1,
+  leftcols      = "studlab", leftlabs = "Study",
+  rightcols     = c("effect", "ci"), rightlabs = c("Sensitivity %", "95% C.I."),
+  xlim          = c(0, 100),   # Scale 0-100
+  fontsize      = 10,
+  arrows        = FALSE,      # No Arrows
+  addrow        = TRUE, addrow.overall = TRUE
+)
+
+grid.text(paste0("Heterogeneity (Adult): I\u00B2 = ", sens_I2_adult, "%, \u03C4\u00B2 = ", sens_tau2_adult, ", ", sens_pQ_adult), x = unit(0.05, "npc"), y = unit(0.08, "npc"), just = "left", gp = gpar(fontsize = 8))
+grid.text(paste0("Heterogeneity (Pediatric): I\u00B2 = ", sens_I2_ped, "%, \u03C4\u00B2 = ", sens_tau2_ped, ", ", sens_pQ_ped), x = unit(0.05, "npc"), y = unit(0.06, "npc"), just = "left", gp = gpar(fontsize = 8))
+grid.text(paste0("Heterogeneity (Overall): I\u00B2 = ", sens_I2_overall, "%, \u03C4\u00B2 = ", sens_tau2_overall, ", ", sens_pQ_overall), x = unit(0.05, "npc"), y = unit(0.04, "npc"), just = "left", gp = gpar(fontsize = 8))
+grid.text(paste0("Test for subgroup differences: \u03C7\u00B2 = ", sens_Qb, ", df = ", sens_dfb, " (", sens_pQb, ")"), x = unit(0.05, "npc"), y = unit(0.02, "npc"), just = "left", gp = gpar(fontsize = 8))
+
+dev.off()
+
+# ==========================================
+# 4. SPECIFICITY SUBGROUP PLOT
+# ==========================================
+m_spec_sub <- metaprop(
+  event = TN, n = NoFracture, studlab = Study, data = df,
+  subgroup = Subgroup,
+  method = "Inverse", sm = "PLOGIT",
+  random = TRUE, common = FALSE,
+  pscale = 100
+)
+
+m_spec_sub$TE.random    <- -mu2_total
+m_spec_sub$lower.random <- -mu2_total - 1.96 * se2_total
+m_spec_sub$upper.random <- -mu2_total + 1.96 * se2_total
+m_spec_sub$text.random  <- "Bivariate Pooled Estimate"
+
+spec_I2_adult    <- round(m_spec_sub$I2.w[1] * 100, 1)
+spec_tau2_adult  <- round(m_spec_sub$tau2.w[1], 4)
+spec_pQ_adult    <- fmt_p(m_spec_sub$pval.Q.w[1])
+spec_I2_ped      <- round(m_spec_sub$I2.w[2] * 100, 1)
+spec_tau2_ped    <- round(m_spec_sub$tau2.w[2], 4)
+spec_pQ_ped      <- fmt_p(m_spec_sub$pval.Q.w[2])
+spec_I2_overall  <- round(m_spec_sub$I2 * 100, 1)
+spec_tau2_overall<- round(m_spec_sub$tau2, 4)
+spec_pQ_overall  <- fmt_p(m_spec_sub$pval.Q)
+spec_Qb          <- round(m_spec_sub$Q.b.random, 2)
+spec_dfb         <- m_spec_sub$df.Q.b
+spec_pQb         <- fmt_p(m_spec_sub$pval.Q.b.random)
+
+png("/Users/harshsingh/forest_plot_specificity_subgroup_fixed 2.png", width = 1800, height = 3000, res = 200)
+
+meta::forest(
+  m_spec_sub,
+  main          = "Specificity (%) by Age Group",
+  col.square    = "navy", col.diamond = "maroon",
+  weight.study  = "random",
+  print.I2      = FALSE, print.tau2 = FALSE, 
+  print.Q       = FALSE, print.pval.Q = FALSE, 
+  print.Q.b     = FALSE, test.subgroup = FALSE,
+  spacing       = 1.4, digits = 1,
+  leftcols      = "studlab", leftlabs = "Study",
+  rightcols     = c("effect", "ci"), rightlabs = c("Specificity %", "95% C.I."),
+  xlim          = c(0, 100),   # FIXED: Scale 0-100
+  fontsize      = 10,
+  arrows        = FALSE,      # FIXED: No Arrows for Van der Gaast
+  addrow        = TRUE, addrow.overall = TRUE
+)
+
+grid.text(paste0("Heterogeneity (Adult): I\u00B2 = ", spec_I2_adult, "%, \u03C4\u00B2 = ", spec_tau2_adult, ", ", spec_pQ_adult), x = unit(0.05, "npc"), y = unit(0.08, "npc"), just = "left", gp = gpar(fontsize = 8))
+grid.text(paste0("Heterogeneity (Pediatric): I\u00B2 = ", spec_I2_ped, "%, \u03C4\u00B2 = ", spec_tau2_ped, ", ", spec_pQ_ped), x = unit(0.05, "npc"), y = unit(0.06, "npc"), just = "left", gp = gpar(fontsize = 8))
+grid.text(paste0("Heterogeneity (Overall): I\u00B2 = ", spec_I2_overall, "%, \u03C4\u00B2 = ", spec_tau2_overall, ", ", spec_pQ_overall), x = unit(0.05, "npc"), y = unit(0.04, "npc"), just = "left", gp = gpar(fontsize = 8))
+grid.text(paste0("Test for subgroup differences: \u03C7\u00B2 = ", spec_Qb, ", df = ", spec_dfb, " (", spec_pQb, ")"), x = unit(0.05, "npc"), y = unit(0.02, "npc"), just = "left", gp = gpar(fontsize = 8))
+
+
+
