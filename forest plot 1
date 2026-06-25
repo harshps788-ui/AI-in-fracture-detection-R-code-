@@ -1,0 +1,150 @@
+library(readxl)
+library(meta)
+library(mada)
+library(grid)
+
+# Load the new data
+df <- read_excel("/Users/harshsingh/Desktop/systematic review full text papers /2X2 table forest plot .xlsx")
+
+# Calculate group totals
+df$Fracture <- df$TP + df$FN
+df$NoFracture <- df$FP + df$TN
+
+# ==========================================
+# 1. BIVARIATE MODEL CALCULATION
+# ==========================================
+fit_biv <- reitsma(data=df)
+sum_biv <- summary(fit_biv)
+
+mu1 <- sum_biv$coefficients[1,1]
+mu1_se <- sum_biv$coefficients[1,2]
+mu2 <- sum_biv$coefficients[2,1]
+mu2_se <- sum_biv$coefficients[2,2]
+
+pool_sens <- plogis(mu1)
+pool_sens_L <- plogis(mu1 - 1.96 * mu1_se)
+pool_sens_U <- plogis(mu1 + 1.96 * mu1_se)
+
+pool_spec <- plogis(-mu2)
+pool_spec_L <- plogis(-mu2 - 1.96 * mu2_se)
+pool_spec_U <- plogis(-mu2 + 1.96 * mu2_se)
+
+# ==========================================
+# 2. SENSITIVITY FOREST PLOT
+# ==========================================
+m_sens <- metaprop(event = TP, n = Fracture, studlab = Study, data = df,
+method = "Inverse", sm = "PLOGIT",
+random = TRUE, common = FALSE,
+pscale = 100)
+
+m_sens$TE.random <- mu1
+m_sens$lower.random <- mu1 - 1.96 * mu1_se
+m_sens$upper.random <- mu1 + 1.96 * mu1_se
+m_sens$text.random <- "Bivariate Pooled Estimate"
+
+png("/Users/harshsingh/forest_plot_sensitivity_final.png",
+width = 1800, height = 2200, res = 200)
+
+par(mar = c(6, 4, 4, 2))
+
+meta::forest(m_sens,
+main = "Forest Plot for Sensitivity (%)",
+col.square = "grey40",
+col.square.lines = "black",
+weight.study = "random",
+
+print.i2 = FALSE,
+print.tau2 = FALSE,
+print.pval.Q = FALSE,
+
+spacing = 1.4,
+digits = 1,
+
+# REMOVED: event and n columns
+leftcols = c("studlab"),
+leftlabs = c("Study"),
+
+rightcols = c("effect", "ci"),
+rightlabs = c("Sensitivity (%)", "95% CI"),
+
+xlim = c(0, 100),
+fontsize = 10)
+
+grid::grid.text(
+paste0("Heterogeneity: I² = ", round(m_sens$I2 * 100, 1),
+"%, τ² = ", round(m_sens$tau^2, 3),
+", p < 0.001"),
+x = 0.5, y = 0.02, gp = grid::gpar(fontsize = 10)
+)
+
+dev.off()
+
+# ==========================================
+# 3. SPECIFICITY FOREST PLOT
+# ==========================================
+m_spec <- metaprop(event = TN, n = NoFracture, studlab = Study, data = df,
+method = "Inverse", sm = "PLOGIT",
+random = TRUE, common = FALSE,
+pscale = 100)
+
+m_spec$TE.random <- -mu2
+m_spec$lower.random <- -mu2 - 1.96 * mu2_se
+m_spec$upper.random <- -mu2 + 1.96 * mu2_se
+m_spec$text.random <- "Bivariate Pooled Estimate"
+
+png("/Users/harshsingh/forest_plot_specificity_final.png",
+width = 1800, height = 2200, res = 200)
+
+par(mar = c(6, 4, 4, 2))
+
+meta::forest(m_spec,
+main = "Forest Plot for Specificity (%)",
+col.square = "grey40",
+col.square.lines = "black",
+weight.study = "random",
+
+print.i2 = FALSE,
+print.tau2 = FALSE,
+print.pval.Q = FALSE,
+
+spacing = 1.4,
+digits = 1,
+
+# REMOVED: event and n columns
+leftcols = c("studlab"),
+leftlabs = c("Study"),
+
+rightcols = c("effect", "ci"),
+rightlabs = c("Specificity (%)", "95% CI"),
+
+xlim = c(0, 100),
+fontsize = 10)
+
+grid::grid.text(
+paste0("Heterogeneity: I² = ", round(m_spec$I2 * 100, 1),
+"%, τ² = ", round(m_spec$tau^2, 3),
+", p < 0.001"),
+x = 0.5, y = 0.02, gp = grid::gpar(fontsize = 10)
+)
+
+dev.off()
+
+# ==========================================
+# 4. RESULTS TABLE
+# ==========================================
+results_df <- data.frame(
+Metric = c("Sensitivity", "Specificity"),
+Pooled_Estimate = c(pool_sens, pool_spec),
+CI_95_Lower = c(pool_sens_L, pool_spec_L),
+CI_95_Upper = c(pool_sens_U, pool_spec_U),
+I2 = c(m_sens$I2, m_spec$I2)
+)
+
+results_df$Pooled_Estimate <- paste0(round(results_df$Pooled_Estimate * 100, 1), "%")
+results_df$CI_95_Lower <- paste0(round(results_df$CI_95_Lower * 100, 1), "%")
+results_df$CI_95_Upper <- paste0(round(results_df$CI_95_Upper * 100, 1), "%")
+results_df$I2 <- paste0(round(results_df$I2 * 100, 1), "%")
+
+colnames(results_df) <- c("Metric", "Pooled Estimate (Bivariate)", "Lower 95% CI", "Upper 95% CI", "I²")
+
+write.csv(results_df, "/Users/harshsingh/meta_analysis_results.csv", row.names=FALSE)
