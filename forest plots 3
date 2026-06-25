@@ -1,0 +1,154 @@
+library(meta)
+library(mada)
+library(grid) 
+
+# ==========================================
+# 1. PREPARE DATA & SUBGROUPS
+# ==========================================
+# Data explicitly imported from your uploaded file
+df <- data.frame(
+  Study = c("Bousson V 2023", "Duron L 2021", "Altmann-Schneider I 2025", "Altmann-Schneider I 2024", 
+            "Nguyen T, 2022", "Hayashi D 2022", "Gasmi I 2023", "Niccolo` Franco P 2024", 
+            "Ziegner M, 2025", "Mohammadi M  2025", "Pape J 2025", "Guermazi A 2022", 
+            "Ruitenbeek HC 2025", "Ren M 2022", "Nguyen HH, 2024", "Lind A 2021", 
+            "Van der Gaast N, 2025", "Kitamura G, 2019", "Ashkani-Esfahani S 2022", 
+            "Cheng C 2023", " Xie Y 2024", "oelding JF 2024 ", " Swamy K 2022", "Prijs J 2022"),
+  TP = c(48, 37, 624, 531, 20, 22, 13, 48, 59, 16, 42, 27, 1015, 11, 632, 103, 38, 32, 208, 42, 213, 4, 8424, 67),
+  FP = c(18, 2, 32, 9, 3, 0, 11, 4, 45, 5, 3, 2, 355, 1, 9, 48, 21, 7, 2, 5, 29, 0, 21, 1),
+  TN = c(356, 42, 1480, 1484, 27, 30, 270, 56, 229, 77, 159, 25, 2675, 11, 281, 432, 19, 33, 208, 45, 192, 29, 2979, 24),
+  FN = c(7, 9, 56, 76, 10, 8, 3, 12, 18, 13, 5, 3, 114, 1, 101, 17, 3, 8, 2, 8, 29, 0, 576, 8)
+)
+
+df$Fracture   <- df$TP + df$FN
+df$NoFracture <- df$FP + df$TN
+
+# UPDATED: First 15 are External Validation, the rest are Internal Validation
+df$Subgroup   <- factor(
+  c(rep("External Validation", 15), rep("Internal Validation", nrow(df) - 15)),
+  levels = c("External Validation", "Internal Validation")
+)
+
+# ==========================================
+# 2. BIVARIATE POOLED ESTIMATE (OVERALL)
+# ==========================================
+fit_biv_total <- reitsma(data = df)
+sum_biv_total <- summary(fit_biv_total)
+
+mu_total  <- sum_biv_total$coefficients[1, 1]
+se_total  <- sum_biv_total$coefficients[1, 2]
+mu2_total <- sum_biv_total$coefficients[2, 1]
+se2_total <- sum_biv_total$coefficients[2, 2]
+
+fmt_p <- function(p) if (p < 0.0001) "p < 0.0001" else paste0("p = ", round(p, 4))
+
+# ==========================================
+# 3. SENSITIVITY SUBGROUP PLOT
+# ==========================================
+m_sens_sub <- metaprop(
+  event = TP, n = Fracture, studlab = Study, data = df,
+  subgroup = Subgroup,
+  method = "Inverse", sm = "PLOGIT",
+  random = TRUE, common = FALSE,
+  pscale = 100
+)
+
+m_sens_sub$TE.random    <- mu_total
+m_sens_sub$lower.random <- mu_total - 1.96 * se_total
+m_sens_sub$upper.random <- mu_total + 1.96 * se_total
+m_sens_sub$text.random  <- "Bivariate Pooled Estimate"
+
+# Subgroup stats for footnotes
+sens_I2_ext      <- round(m_sens_sub$I2.w[1] * 100, 1)
+sens_tau2_ext    <- round(m_sens_sub$tau2.w[1], 4)
+sens_pQ_ext      <- fmt_p(m_sens_sub$pval.Q.w[1])
+sens_I2_int      <- round(m_sens_sub$I2.w[2] * 100, 1)
+sens_tau2_int    <- round(m_sens_sub$tau2.w[2], 4)
+sens_pQ_int      <- fmt_p(m_sens_sub$pval.Q.w[2])
+sens_I2_overall  <- round(m_sens_sub$I2 * 100, 1)
+sens_tau2_overall<- round(m_sens_sub$tau2, 4)
+sens_pQ_overall  <- fmt_p(m_sens_sub$pval.Q)
+sens_Qb          <- round(m_sens_sub$Q.b.random, 2)
+sens_dfb         <- m_sens_sub$df.Q.b
+sens_pQb         <- fmt_p(m_sens_sub$pval.Q.b.random)
+
+png("forest_plot_sensitivity_validation_v2.png", width = 1800, height = 3000, res = 200)
+
+meta::forest(
+  m_sens_sub,
+  main          = "Sensitivity (%) by Validation Type",
+  col.square    = "navy", col.diamond = "maroon",
+  weight.study  = "random",
+  print.I2      = FALSE, print.tau2 = FALSE, 
+  print.Q       = FALSE, print.pval.Q = FALSE, 
+  print.Q.b     = FALSE, test.subgroup = FALSE,
+  spacing       = 1.4, digits = 1,
+  leftcols      = "studlab", leftlabs = "Study",
+  rightcols     = c("effect", "ci"), rightlabs = c("Sensitivity %", "95% C.I."),
+  xlim          = c(0, 100),
+  fontsize      = 10,
+  arrows        = FALSE,
+  addrow        = TRUE, addrow.overall = TRUE
+)
+
+grid.text(paste0("Heterogeneity (External Validation): I\u00B2 = ", sens_I2_ext, "%, \u03C4\u00B2 = ", sens_tau2_ext, ", ", sens_pQ_ext), x = unit(0.05, "npc"), y = unit(0.08, "npc"), just = "left", gp = gpar(fontsize = 8))
+grid.text(paste0("Heterogeneity (Internal Validation): I\u00B2 = ", sens_I2_int, "%, \u03C4\u00B2 = ", sens_tau2_int, ", ", sens_pQ_int), x = unit(0.05, "npc"), y = unit(0.06, "npc"), just = "left", gp = gpar(fontsize = 8))
+grid.text(paste0("Heterogeneity (Overall): I\u00B2 = ", sens_I2_overall, "%, \u03C4\u00B2 = ", sens_tau2_overall, ", ", sens_pQ_overall), x = unit(0.05, "npc"), y = unit(0.04, "npc"), just = "left", gp = gpar(fontsize = 8))
+grid.text(paste0("Test for subgroup differences: \u03C7\u00B2 = ", sens_Qb, ", df = ", sens_dfb, " (", sens_pQb, ")"), x = unit(0.05, "npc"), y = unit(0.02, "npc"), just = "left", gp = gpar(fontsize = 8))
+
+dev.off()
+
+# ==========================================
+# 4. SPECIFICITY SUBGROUP PLOT
+# ==========================================
+m_spec_sub <- metaprop(
+  event = TN, n = NoFracture, studlab = Study, data = df,
+  subgroup = Subgroup,
+  method = "Inverse", sm = "PLOGIT",
+  random = TRUE, common = FALSE,
+  pscale = 100
+)
+
+m_spec_sub$TE.random    <- -mu2_total
+m_spec_sub$lower.random <- -mu2_total - 1.96 * se2_total
+m_spec_sub$upper.random <- -mu2_total + 1.96 * se2_total
+m_spec_sub$text.random  <- "Bivariate Pooled Estimate"
+
+# Subgroup stats for footnotes
+spec_I2_ext      <- round(m_spec_sub$I2.w[1] * 100, 1)
+spec_tau2_ext    <- round(m_spec_sub$tau2.w[1], 4)
+spec_pQ_ext      <- fmt_p(m_spec_sub$pval.Q.w[1])
+spec_I2_int      <- round(m_spec_sub$I2.w[2] * 100, 1)
+spec_tau2_int    <- round(m_spec_sub$tau2.w[2], 4)
+spec_pQ_int      <- fmt_p(m_spec_sub$pval.Q.w[2])
+spec_I2_overall  <- round(m_spec_sub$I2 * 100, 1)
+spec_tau2_overall<- round(m_spec_sub$tau2, 4)
+spec_pQ_overall  <- fmt_p(m_spec_sub$pval.Q)
+spec_Qb          <- round(m_spec_sub$Q.b.random, 2)
+spec_dfb         <- m_spec_sub$df.Q.b
+spec_pQb         <- fmt_p(m_spec_sub$pval.Q.b.random)
+
+png("forest_plot_specificity_validation_v2.png", width = 1800, height = 3000, res = 200)
+
+meta::forest(
+  m_spec_sub,
+  main          = "Specificity (%) by Validation Type",
+  col.square    = "navy", col.diamond = "maroon",
+  weight.study  = "random",
+  print.I2      = FALSE, print.tau2 = FALSE, 
+  print.Q       = FALSE, print.pval.Q = FALSE, 
+  print.Q.b     = FALSE, test.subgroup = FALSE,
+  spacing       = 1.4, digits = 1,
+  leftcols      = "studlab", leftlabs = "Study",
+  rightcols     = c("effect", "ci"), rightlabs = c("Specificity %", "95% C.I."),
+  xlim          = c(0, 100),
+  fontsize      = 10,
+  arrows        = FALSE,
+  addrow        = TRUE, addrow.overall = TRUE
+)
+
+grid.text(paste0("Heterogeneity (External Validation): I\u00B2 = ", spec_I2_ext, "%, \u03C4\u00B2 = ", spec_tau2_ext, ", ", spec_pQ_ext), x = unit(0.05, "npc"), y = unit(0.08, "npc"), just = "left", gp = gpar(fontsize = 8))
+grid.text(paste0("Heterogeneity (Internal Validation): I\u00B2 = ", spec_I2_int, "%, \u03C4\u00B2 = ", spec_tau2_int, ", ", spec_pQ_int), x = unit(0.05, "npc"), y = unit(0.06, "npc"), just = "left", gp = gpar(fontsize = 8))
+grid.text(paste0("Heterogeneity (Overall): I\u00B2 = ", spec_I2_overall, "%, \u03C4\u00B2 = ", spec_tau2_overall, ", ", spec_pQ_overall), x = unit(0.05, "npc"), y = unit(0.04, "npc"), just = "left", gp = gpar(fontsize = 8))
+grid.text(paste0("Test for subgroup differences: \u03C7\u00B2 = ", spec_Qb, ", df = ", spec_dfb, " (", spec_pQb, ")"), x = unit(0.05, "npc"), y = unit(0.02, "npc"), just = "left", gp = gpar(fontsize = 8))
+
+dev.off()
