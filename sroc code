@@ -1,0 +1,91 @@
+# ============================================================
+# FINAL SROC PLOT - AUC ONLY, BLACK SROC + DASHED CI
+# ============================================================
+library(mada)
+library(readr)
+
+# 1. Load the data
+df <- read_excel("/Users/harshsingh/Desktop/systematic review full text papers /2X2 table forest plot .xlsx")
+
+# 2. Fit the Reitsma Model
+fit <- reitsma(df)
+
+# 3. Calculate Individual Study Points
+study_sens <- df$TP / (df$TP + df$FN)
+study_fpr  <- df$FP / (df$FP + df$TN)
+
+# 4. Extract Summary Points
+mu      <- as.numeric(coef(fit))
+sens_est <- plogis(mu[1])
+fpr_est  <- plogis(mu[2])
+
+# 5. Bootstrap AUC CI
+set.seed(123)
+B <- 1000
+auc_samples <- numeric(B)
+suppressWarnings({
+  for(i in 1:B) {
+    idx <- sample(1:nrow(df), replace = TRUE)
+    df_samp <- df[idx, ]
+    auc_samples[i] <- tryCatch({
+      fit_samp <- reitsma(df_samp)
+      as.numeric(mada::AUC(fit_samp)$AUC)
+    }, error = function(e) NA)
+  }
+})
+auc_samples <- na.omit(auc_samples)
+auc_val   <- round(as.numeric(mada::AUC(fit)$AUC), 3)
+auc_lower <- round(quantile(auc_samples, 0.025), 3)
+auc_upper <- round(quantile(auc_samples, 0.975), 3)
+auc_label <- paste0("AUC: ", auc_val, " (95% CI: ", auc_lower, "-", auc_upper, ")")
+
+# 6. Close any open graphics devices
+while (!is.null(dev.list())) dev.off()
+
+# 7. Open PNG device
+png("sroc_final_clean.png", width = 2400, height = 2400, res = 300)
+
+# 8. Base plot — MUST come before any points() or axis() calls
+plot(fit,
+     sroclwd  = 2,
+     sroccol  = "black",
+     plotsumm = FALSE,
+     xlim = c(0, 1),
+     ylim = c(0, 1),
+     xaxs = "i",
+     yaxs = "i",
+     xaxt = "n",
+     ann  = FALSE)
+
+# 9. Add individual study points
+points(study_fpr, study_sens, pch = 1, col = "black", cex = 1.2)
+
+# 10. Axis labels and grid
+title(xlab = "Specificity", ylab = "Sensitivity")
+axis(1, at = seq(0, 1, by = 0.2),
+     labels = c("1.0", "0.8", "0.6", "0.4", "0.2", "0.0"))
+grid(col = "lightgray", lty = "dotted")
+
+# 11. 95% Confidence Region — dashed black ellipse
+ROCellipse(fit, level = 0.95, add = TRUE, pch = NA,
+           lty = 2, border = "black", lwd = 2)
+
+# 12. Summary point — red square
+points(fpr_est, sens_est, pch = 15, col = "red", cex = 1.5)
+
+# 13. Legend
+legend("bottomright",
+       legend = c("Individual studies",
+                  "SROC curve",
+                  "Summary point",
+                  "95% Confidence Region",
+                  auc_label),
+       col = c("black", "black", "red", "black", NA),
+       pch = c(1,  NA,  15, NA, NA),
+       lty = c(NA,  1,  NA,  2, NA),
+       lwd = c(1,   2,  NA,  2, NA),
+       bty = "n",
+       cex = 0.8)
+
+dev.off()
+cat("Done! 'sroc_final_clean.png' created.\n")
