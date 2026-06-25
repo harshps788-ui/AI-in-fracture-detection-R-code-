@@ -1,0 +1,120 @@
+# ── Deeks' Funnel Plot – AI Fracture Detection Studies ──────────────────────
+# Method: Unweighted OLS, harmonic ESS, continuity correction on zero-cell studies only
+
+library(ggplot2)
+library(ggrepel)
+
+# ── 1. Data ─────────────────────────────────────────────────────────────────
+df <- data.frame(
+Study = c("Lind A 2021", "Ruitenbeek HC 2025", "Ren M 2022",
+"Van der Gaast N 2025", "Prijs J 2022", "Mohammadi M 2025",
+"Swamy K 2022", "Kitamura G 2019", "Bousson V 2023",
+"Duron L 2021", "Ashkani-Esfahani S 2022", "Cheng C 2023",
+"Guermazi A 2022", "Xie Y 2024", "Nguyen HH 2024",
+"Oelding JF 2024", "Altmann-Schneider I 2025",
+"Altmann-Schneider I 2024", "Nguyen T 2022", "Hayashi D 2022",
+"Gasmi I 2023", "Niccolo Franco P 2024", "Ziegner M 2025",
+"Pape J 2025"),
+TP = c(103,1015,11,38,67,16,8424,32,48,37,208,42,27,213,632,4,624,531,20,22,13,48,59,42),
+FP = c(48,355,1,21,1,5,21,7,18,2,2,5,2,29,9,0,32,9,3,0,11,4,45,3),
+TN = c(432,2675,11,19,24,77,2979,33,356,42,208,45,25,192,281,29,1480,1484,27,30,270,56,229,159),
+FN = c(17,114,1,3,8,13,576,8,7,9,2,8,3,29,101,0,56,76,10,8,3,12,18,5)
+)
+
+# ── 2. Continuity correction (+0.5 to zero-cell studies only) ────────────────
+zero_studies <- apply(df[, c("TP","FP","TN","FN")], 1, function(r) any(r == 0))
+df[zero_studies, c("TP","FP","TN","FN")] <- df[zero_studies, c("TP","FP","TN","FN")] + 0.5
+
+# ── 3. Calculate logDOR and harmonic ESS ─────────────────────────────────────
+df$DOR         <- (df$TP * df$TN) / (df$FP * df$FN)
+df$logDOR      <- log(df$DOR)
+df$n1          <- df$TP + df$FN
+df$n2          <- df$FP + df$TN
+df$n_total     <- df$n1 + df$n2
+df$ESS         <- 4 * df$n1 * df$n2 / df$n_total
+df$inv_sqrtESS <- 1 / sqrt(df$ESS)
+
+# ── 4. Unweighted OLS regression: logDOR ~ 1/sqrt(ESS) ──────────────────────
+model     <- lm(logDOR ~ inv_sqrtESS, data = df)
+slope     <- coef(model)[2]
+intercept <- coef(model)[1]
+p_val     <- summary(model)$coefficients[2, 4]
+se        <- summary(model)$coefficients[2, 2]
+
+cat(sprintf("Slope:     %.3f (SE = %.3f)\n", slope, se))
+cat(sprintf("p-value:   %.4f\n", p_val))
+
+# ── 5. Regression line (back-transformed for plot axes) ──────────────────────
+x_seq    <- seq(min(df$logDOR) - 0.6, max(df$logDOR) + 0.6, length.out = 400)
+y_seq    <- (x_seq - intercept) / slope
+reg_line <- data.frame(x = x_seq, y = y_seq) |>
+subset(y > 0 & y < max(df$inv_sqrtESS) * 1.35)
+
+# ── 6. Stats annotation — placed at explicit data coordinates ────────────────
+verdict     <- ifelse(p_val < 0.05,
+"Significant asymmetry (p < 0.05)",
+"No significant asymmetry (p \u2265 0.05)")
+stats_label <- sprintf(
+"Deeks' Asymmetry Test\nSlope = %.2f (SE = %.2f)\np-value = %.3f\n%s",
+slope, se, p_val, verdict
+)
+
+# Anchor box in bottom-right of data space
+# (large x, large y because y-axis is reversed — large = bottom)
+annot_x <- max(df$logDOR) - 0.2
+annot_y <- max(df$inv_sqrtESS) * 0.95
+
+# ── 7. Plot ──────────────────────────────────────────────────────────────────
+ggplot(df, aes(x = logDOR, y = inv_sqrtESS)) +
+
+# Regression line
+geom_line(data = reg_line, aes(x = x, y = y),
+colour = "#d94f2b", linewidth = 0.9, linetype = "dashed",
+inherit.aes = FALSE) +
+
+# Equal-sized points
+geom_point(size = 3,
+colour = "#2c6fad", fill = "#2c6fad",
+alpha = 0.72, shape = 21, stroke = 0.7) +
+
+# Study labels (non-overlapping)
+geom_text_repel(aes(label = Study),
+size = 2.4, colour = "#2a2a2a",
+box.padding = 0.3, point.padding = 0.2,
+max.overlaps = 30, segment.size = 0.3,
+segment.colour = "#aaaaaa") +
+
+# Stats box at explicit coordinates — always visible
+annotate("label",
+x = annot_x, y = annot_y,
+label = stats_label,
+hjust = 1, vjust = 1,
+size = 3.2, colour = "#1a1a1a",
+fill = "#fffbea",
+label.r = unit(0.4, "lines"),
+label.padding = unit(0.5, "lines")) +
+
+scale_y_reverse(expand = expansion(mult = c(0.02, 0.15))) +
+scale_x_continuous(expand = expansion(mult = c(0.05, 0.05))) +
+
+labs(
+title    = "Deeks' Funnel Plot Asymmetry Test",
+subtitle = "AI Models for Fracture Detection — Publication Bias Assessment",
+x        = "Diagnostic Log Odds Ratio",
+y        = "1 / \u221a(Effective Sample Size)",
+caption  = "ESS = 4\u00b7n\u2081\u00b7n\u2082/(n\u2081+n\u2082)  |  Continuity correction (+0.5) applied to zero-cell studies only  |  Unweighted OLS"
+) +
+
+theme_classic(base_size = 12) +
+theme(
+plot.title       = element_text(face = "bold", size = 14, hjust = 0),
+plot.subtitle    = element_text(size = 10, colour = "#444444", hjust = 0),
+plot.caption     = element_text(size = 7, colour = "#777777", face = "italic"),
+axis.title       = element_text(size = 11),
+panel.background = element_rect(fill = "#f8f9fa"),
+plot.background  = element_rect(fill = "white", colour = NA),
+legend.position  = "none"
+)
+
+# ── 8. Save ──────────────────────────────────────────────────────────────────
+ggsave("deeks_funnel_plot.png", width = 10, height = 8, dpi = 200, bg = "white")
