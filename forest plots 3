@@ -2,9 +2,6 @@ library(meta)
 library(mada)
 library(grid) 
 
-# ==========================================
-# 1. PREPARE DATA & SUBGROUPS
-# ==========================================
 # Data explicitly imported from your uploaded file
 df <- data.frame(
   Study = c("Bousson V 2023", "Duron L 2021", "Altmann-Schneider I 2025", "Altmann-Schneider I 2024", 
@@ -28,9 +25,9 @@ df$Subgroup   <- factor(
   levels = c("External Validation", "Internal Validation")
 )
 
-# ==========================================
-# 2. BIVARIATE POOLED ESTIMATE (OVERALL)
-# ==========================================
+
+
+
 fit_biv_total <- reitsma(data = df)
 sum_biv_total <- summary(fit_biv_total)
 
@@ -41,9 +38,7 @@ se2_total <- sum_biv_total$coefficients[2, 2]
 
 fmt_p <- function(p) if (p < 0.0001) "p < 0.0001" else paste0("p = ", round(p, 4))
 
-# ==========================================
-# 3. SENSITIVITY SUBGROUP PLOT
-# ==========================================
+
 m_sens_sub <- metaprop(
   event = TP, n = Fracture, studlab = Study, data = df,
   subgroup = Subgroup,
@@ -97,9 +92,6 @@ grid.text(paste0("Test for subgroup differences: \u03C7\u00B2 = ", sens_Qb, ", d
 
 dev.off()
 
-# ==========================================
-# 4. SPECIFICITY SUBGROUP PLOT
-# ==========================================
 m_spec_sub <- metaprop(
   event = TN, n = NoFracture, studlab = Study, data = df,
   subgroup = Subgroup,
