@@ -10,9 +10,7 @@ df <- read_excel("/Users/harshsingh/Desktop/systematic review full text papers /
 df$Fracture <- df$TP + df$FN
 df$NoFracture <- df$FP + df$TN
 
-# ==========================================
-# 1. BIVARIATE MODEL CALCULATION
-# ==========================================
+
 fit_biv <- reitsma(data=df)
 sum_biv <- summary(fit_biv)
 
@@ -29,9 +27,7 @@ pool_spec <- plogis(-mu2)
 pool_spec_L <- plogis(-mu2 - 1.96 * mu2_se)
 pool_spec_U <- plogis(-mu2 + 1.96 * mu2_se)
 
-# ==========================================
-# 2. SENSITIVITY FOREST PLOT
-# ==========================================
+
 m_sens <- metaprop(event = TP, n = Fracture, studlab = Study, data = df,
 method = "Inverse", sm = "PLOGIT",
 random = TRUE, common = FALSE,
@@ -79,9 +75,7 @@ x = 0.5, y = 0.02, gp = grid::gpar(fontsize = 10)
 
 dev.off()
 
-# ==========================================
-# 3. SPECIFICITY FOREST PLOT
-# ==========================================
+
 m_spec <- metaprop(event = TN, n = NoFracture, studlab = Study, data = df,
 method = "Inverse", sm = "PLOGIT",
 random = TRUE, common = FALSE,
@@ -129,9 +123,7 @@ x = 0.5, y = 0.02, gp = grid::gpar(fontsize = 10)
 
 dev.off()
 
-# ==========================================
-# 4. RESULTS TABLE
-# ==========================================
+
 results_df <- data.frame(
 Metric = c("Sensitivity", "Specificity"),
 Pooled_Estimate = c(pool_sens, pool_spec),
